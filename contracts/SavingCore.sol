@@ -14,6 +14,7 @@ interface IVaultManager {
 }
 
 contract SavingCore is ERC721, Ownable, Pausable, ReentrancyGuard {
+    using SafeERC20 for IERC20;
     event PlanCreated(
         uint256 indexed planId,
         uint256 tenorDays,
@@ -185,10 +186,7 @@ contract SavingCore is ERC721, Ownable, Pausable, ReentrancyGuard {
             require(amount <= plan.maxDeposit, "Above maximum deposit");
         }
 
-        require(
-            token.transferFrom(msg.sender, address(this), amount),
-            "Transfer failed"
-        );
+        token.safeTransferFrom(msg.sender, address(this), amount);
 
         uint256 depositId = nextDepositId;
 
@@ -243,10 +241,7 @@ contract SavingCore is ERC721, Ownable, Pausable, ReentrancyGuard {
 
         vault.payInterest(msg.sender, interest);
 
-        require(
-            token.transfer(msg.sender, dep.principal),
-            "Principal transfer failed"
-        );
+        token.safeTransfer(msg.sender, dep.principal);
 
         emit Withdrawn(depositId, msg.sender, dep.principal, interest, false);
     }
@@ -273,12 +268,8 @@ contract SavingCore is ERC721, Ownable, Pausable, ReentrancyGuard {
 
         _burn(depositId);
 
-        require(token.transfer(msg.sender, refund), "Refund failed");
-
-        require(
-            token.transfer(vault.feeReceiver(), penalty),
-            "Penalty transfer failed"
-        );
+        token.safeTransfer(msg.sender, refund);
+        token.safeTransfer(vault.feeReceiver(), penalty);
 
         emit Withdrawn(depositId, msg.sender, refund, 0, true);
     }
@@ -295,6 +286,7 @@ contract SavingCore is ERC721, Ownable, Pausable, ReentrancyGuard {
 
         require(oldDep.status == DepositStatus.Active, "Deposit inactive");
 
+        require(block.timestamp >= oldDep.maturityAt, "Not matured");
         require(
             block.timestamp <= oldDep.maturityAt + GRACE_PERIOD,
             "Grace period expired"
@@ -372,6 +364,12 @@ contract SavingCore is ERC721, Ownable, Pausable, ReentrancyGuard {
 
         require(plan.enabled, "Plan disabled");
 
+        uint256 interest = calculateInterest(
+            oldDep.principal,
+            oldDep.aprBpsAtOpen,
+            oldDep.tenorDays
+        );
+
         oldDep.status = DepositStatus.AutoRenewed;
 
         uint256 newDepositId = nextDepositId;
@@ -392,12 +390,26 @@ contract SavingCore is ERC721, Ownable, Pausable, ReentrancyGuard {
 
         _burn(depositId);
 
+        vault.payInterest(owner, interest);
+
         _safeMint(owner, newDepositId);
 
         emit Renewed(depositId, newDepositId, oldDep.principal, oldDep.planId);
 
         nextDepositId++;
     }
+    function getPlan(
+        uint256 planId
+    ) external view validPlan(planId) returns (SavingPlan memory) {
+        return plans[planId];
+    }
+
+    function getDeposit(
+        uint256 depositId
+    ) external view validDeposit(depositId) returns (Deposit memory) {
+        return deposits[depositId];
+    }
+
     receive() external payable {
         revert("ETH not accepted");
     }

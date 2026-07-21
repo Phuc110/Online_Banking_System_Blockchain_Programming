@@ -13,7 +13,7 @@ describe("MockUSDC", function () {
 
         const MockUSDC = await ethers.getContractFactory("MockUSDC");
 
-        usdc = await MockUSDC.deploy();
+        usdc = await MockUSDC.deploy(owner.address);
 
         await usdc.waitForDeployment();
     });

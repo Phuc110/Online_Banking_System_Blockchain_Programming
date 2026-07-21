@@ -4,7 +4,10 @@ pragma solidity ^0.8.28;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
 contract VaultManager is Ownable, Pausable {
+    using SafeERC20 for IERC20;
     event VaultFunded(address indexed from, uint256 amount);
 
     event VaultWithdrawn(address indexed to, uint256 amount);
@@ -43,10 +46,7 @@ contract VaultManager is Ownable, Pausable {
     function fundVault(uint256 amount) external onlyOwner whenNotPaused {
         require(amount > 0, "Invalid amount");
 
-        require(
-            token.transferFrom(msg.sender, address(this), amount),
-            "Transfer failed"
-        );
+        token.safeTransferFrom(msg.sender, address(this), amount);
 
         emit VaultFunded(msg.sender, amount);
     }
@@ -58,7 +58,7 @@ contract VaultManager is Ownable, Pausable {
             "Insufficient balance"
         );
 
-        require(token.transfer(msg.sender, amount), "Transfer failed");
+        token.safeTransfer(msg.sender, amount);
 
         emit VaultWithdrawn(msg.sender, amount);
     }
@@ -68,7 +68,7 @@ contract VaultManager is Ownable, Pausable {
     ) external onlySavingCore whenNotPaused {
         require(token.balanceOf(address(this)) >= amount, "Vault insufficient");
 
-        require(token.transfer(to, amount), "Transfer failed");
+        token.safeTransfer(to, amount);
 
         emit InterestPaid(to, amount);
     }
