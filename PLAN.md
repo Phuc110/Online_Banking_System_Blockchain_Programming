@@ -27,7 +27,8 @@
 - [x] View Helpers (`getPlan`, `getDeposit`) & Getter Tests
 - [x] Standalone Deployment Script (`scripts/deploy.js`) & Hardhat Ignition Module (`ignition/modules/OnlineBanking.ts`)
 
-## Phase 5 — Deployment & Frontend Integration (NEXT PHASE)
-- [ ] Deploy Sepolia Testnet
-- [ ] Sepolia Etherscan Verification
-- [ ] React / Ethers.js Frontend Interface (Dashboard, Open Deposit, Withdraw/Renew UI, Admin Panel)
+## Phase 5 — Deployment & Frontend Integration (COMPLETED)
+- [x] Hardhat Ignition Sepolia Deployment Config & Script Setup ([ignition/modules/OnlineBanking.ts](file:///d:/Desktop/OnlineBankingProject/ignition/modules/OnlineBanking.ts), [.env.example](file:///d:/Desktop/OnlineBankingProject/.env.example))
+- [x] Sepolia Etherscan Verification Configuration & Contract Config ([contracts/config.ts](file:///d:/Desktop/OnlineBankingProject/frontend/src/contracts/config.ts))
+- [x] React / Ethers.js Frontend Web Application ([frontend/src/App.tsx](file:///d:/Desktop/OnlineBankingProject/frontend/src/App.tsx) - Dashboard, Open Deposit, Withdraw/Renew UI, Faucet, Admin Panel)
+
