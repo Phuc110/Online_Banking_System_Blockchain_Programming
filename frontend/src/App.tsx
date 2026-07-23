@@ -82,10 +82,44 @@ export function App() {
   const [newPlanPenalty, setNewPlanPenalty] = useState<string>("200"); // 2%
   const [fundVaultAmount, setFundVaultAmount] = useState<string>("1000");
 
+  // Hardhat localhost chain ID
+  const HARDHAT_CHAIN_ID = "0x7a69"; // 31337 in hex
+
+  // Switch MetaMask to Hardhat localhost network
+  const switchToLocalNetwork = async () => {
+    try {
+      await window.ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: HARDHAT_CHAIN_ID }],
+      });
+    } catch (switchErr: any) {
+      // Chain not added to MetaMask yet — add it
+      if (switchErr.code === 4902) {
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: HARDHAT_CHAIN_ID,
+            chainName: "Hardhat Localhost",
+            nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+            rpcUrls: ["http://127.0.0.1:8545"],
+          }],
+        });
+      } else {
+        throw switchErr;
+      }
+    }
+  };
+
   // Connect Wallet
   const connectWallet = async () => {
     try {
       if (window.ethereum) {
+        // Ensure MetaMask is on Hardhat localhost before connecting
+        const chainId = await window.ethereum.request({ method: "eth_chainId" });
+        if (chainId !== HARDHAT_CHAIN_ID) {
+          showStatus("info", "Switching MetaMask to Hardhat Localhost network...");
+          await switchToLocalNetwork();
+        }
         const browserProvider = new ethers.BrowserProvider(window.ethereum);
         const accounts = await browserProvider.send("eth_requestAccounts", []);
         const currentSigner = await browserProvider.getSigner();
@@ -94,17 +128,21 @@ export function App() {
         setAccount(accounts[0]);
         showStatus("success", `Wallet connected: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`);
       } else {
-        // Fallback to local hardhat provider
+        // No MetaMask — fallback to direct Hardhat JsonRpc
         const localProvider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
         const currentSigner = await localProvider.getSigner(0);
         const address = await currentSigner.getAddress();
         setProvider(localProvider);
         setSigner(currentSigner);
         setAccount(address);
-        showStatus("info", "Connected to Local Hardhat Node");
+        showStatus("info", "Connected to Local Hardhat Node (no MetaMask)");
       }
     } catch (err: any) {
-      showStatus("error", err.message || "Failed to connect wallet");
+      if (err.code === 4001) {
+        showStatus("error", "Connection rejected. Please approve the wallet request.");
+      } else {
+        showStatus("error", err.message || "Failed to connect wallet");
+      }
     }
   };
 
@@ -117,7 +155,9 @@ export function App() {
   const loadData = async () => {
     if (!account) return;
     try {
-      const activeProvider = provider || new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+      // Always read from local Hardhat node to avoid cross-network decode errors
+      // (MetaMask may be on a different chain; reads must target localhost contracts)
+      const activeProvider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
       const addrs = CONTRACT_ADDRESSES.localhost;
 
       // 1. Balances
@@ -199,16 +239,36 @@ export function App() {
 
   // Mint Mock USDC Faucet
   const mintFaucet = async () => {
-    if (!signer) return;
+    if (!signer) {
+      showStatus("error", "Please connect your wallet first before using the faucet.");
+      return;
+    }
+    if (!account) {
+      showStatus("error", "No account detected. Please reconnect your wallet.");
+      return;
+    }
     try {
       setLoading(true);
+      showStatus("info", "Minting 1,000 mUSDC — please confirm in your wallet...");
       const usdcContract = new ethers.Contract(CONTRACT_ADDRESSES.localhost.mockUSDC, MOCK_USDC_ABI, signer);
       const tx = await usdcContract.mint(account, ethers.parseUnits("1000", 6));
+      showStatus("info", "Transaction submitted — waiting for confirmation...");
       await tx.wait();
-      showStatus("success", "Successfully minted 1,000 mUSDC!");
+      showStatus("success", "Successfully minted 1,000 mUSDC to your wallet!");
       loadData();
     } catch (err: any) {
-      showStatus("error", err.reason || err.message || "Mint failed");
+      // Provide user-friendly messages for common failure cases
+      const raw: string = err.reason || err.data?.message || err.message || "";
+      if (raw.toLowerCase().includes("unauthorized") || raw.toLowerCase().includes("ownable") || raw.toLowerCase().includes("not the owner")) {
+        showStatus("error", "Faucet failed: only the contract owner can mint on this network. Run a local Hardhat node instead.");
+      } else if (raw.toLowerCase().includes("user rejected") || raw.toLowerCase().includes("user denied")) {
+        showStatus("error", "Transaction rejected by user.");
+      } else if (raw.toLowerCase().includes("network") || raw.toLowerCase().includes("could not detect")) {
+        showStatus("error", "Network error — make sure your Hardhat node is running at http://127.0.0.1:8545");
+      } else {
+        showStatus("error", raw || "Mint failed. Check the console for details.");
+      }
+      console.error("[mintFaucet error]", err);
     } finally {
       setLoading(false);
     }
